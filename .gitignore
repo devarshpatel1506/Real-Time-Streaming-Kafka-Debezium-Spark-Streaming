@@ -1,0 +1,57 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+
+# Node (if any UIs/tools)
+node_modules/
+npm-debug.log*
+yarn-*.log
+dist/
+build/
+
+# Java/Scala (Spark/Debezium connectors)
+target/
+*.iml
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Data / Checkpoints / Outputs
+data/
+datasets/
+logs/
+checkpoints/
+spark-warehouse/
+metastore_db/
+_derby.log
+
+# Kafka & Debezium local state
+kafka-logs/
+zookeeper/
+connect-offsets/
+connect-status/
+connect-configs/
+
+# Docker / Compose
+*.pid
+*.seed
+*.crt
+*.key
+*.pem
+
+# Results & temp
+outputs/
+results/
+tmp/
