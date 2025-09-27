@@ -496,3 +496,126 @@ CREATE INDEX idx_orders_customer_time ON orders (customer_id, event_time);
 
 - Recent orders for customer: WHERE customer_id=? AND event_time > NOW()-interval '7 day'
 - Windows: aggregate table produced by Spark; BI reads without hitting raw topics.
+
+---
+
+## 7) Real-Time Notifications (Design)
+
+- **Trigger source:** derived stream in Spark (e.g., volume spikes, threshold breaches) or follow-up Kafka topic produced by Spark.
+
+- **Delivery:** notification_service/ consumes the alert stream and posts to Slack/webhook/email.
+
+- **De-duplication:** include (type, entity_id, window_start) as a natural key; ignore duplicates for the same window.
+
+- **Retry/backoff**: exponential backoff for webhook failures; move to alert.DLQ if repeatedly failing.
+
+**Alert payload (example)**
+```json
+{
+  "type": "VOLUME_SPIKE",
+  "entity": "customer:42",
+  "window": "2025-09-26T10:00:00Z/2025-09-26T10:05:00Z",
+  "metric": {"orders": 128, "baseline": 35},
+  "severity": "high",
+  "traceId": "ab12cd..."
+}
+```
+---
+
+## 8) Real-Time UI (Consumption Model)
+
+- Real-Time-App/ polls the serving DB (or subscribes to a compacted Kafka topic) for fresh metrics.
+
+- Consistency: eventual; dashboards aim for sub-second to few-seconds delay.
+
+- Caching: optional in the app (e.g., SWR pattern) to smooth reads under load.
+
+
+## 9) Environment & Bring-Up (Docker Compose + Ports)
+
+This project is wired to run locally via **Docker Compose**.
+
+### 9.1 Services (from `docker-compose.yml`)
+| Service                | Role                                | Container Port | Typical Host Port* |
+|------------------------|-------------------------------------|----------------|--------------------|
+| zookeeper              | Kafka metadata quorum               | 2181           | 2181               |
+| kafka                  | Kafka broker                        | 9092           | 9092               |
+| postgres               | **Source DB** (CDC)                 | 5432           | 5432               |
+| kafka-connect (Debez.) | **Debezium (Kafka Connect)**        | 8083           | 8083 (or mapped)   |
+| debezium-ui (optional) | Web UI for connectors               | 8080           | 8080 (or mapped)   |
+| control-center (opt.)  | Kafka Confluent Control Center      | 9021           | 9021 (or mapped)   |
+| mysql                  | **Serving DB** (Spark sink)         | 3306           | 3306               |
+
+\* **Note:** Check `docker-compose.yml` for **host port mappings**. If a service maps `8083:8083`, call `http://localhost:8083` from the host. If you `docker exec` **inside** the container, call `http://localhost:8083`.
+
+### 9.2 Bring-Up Order
+
+```bash
+# 1) Start infra
+docker compose up -d
+
+# 2) Prepare Postgres (source)
+#    Run the SQL in postgres-set-up/ (creates and seeds smartphones table)
+
+# 3) Register Debezium connector (Kafka Connect)
+#    From the host: use the **host-mapped** port for Connect (see compose)
+bash debezium-config.sh
+
+# 4) Prepare MySQL (sink)
+#    Run the DDLs in set-up-mysql-db/ (aggregate/materialized tables)
+
+# 5) Start Spark Structured Streaming consumer
+#    (reads Debezium topics, computes aggregates, upserts to MySQL)
+spark-submit <your options> spark-consumer/spark-streaming-consumer.py
+
+# 6) Start the Real-Time App + Notification service (optional)
+```
+
+
+---
+
+## 10) IMAGE DEMO 
+
+### 10.1) Debezium
+
+<img src="images/debezium demo 1.png">
+
+---
+
+<img src="images/debezium demo 2.png">
+
+---
+
+<img src="images/debezium demo 3.png">
+
+---
+
+
+### 10.2) Spark Streaming 
+
+<img src="images/spark streaming 1.png">
+
+---
+
+<img src="images/spark streaming 2.png">
+
+---
+
+<img src="images/spark streaming 3.png">
+
+---
+
+
+### 10.3) Notification service
+
+<img src="images/notification.png">
+
+---
+
+### 10.4) Dashboard
+
+<img src="images/dashboard 1.jpeg">
+
+___
+
+
